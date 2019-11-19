@@ -11,12 +11,12 @@ import java.util.function.Function;
  *
  */
 public class PageRanker {
-	Map<Integer, Page> pageMap = new HashMap<Integer, Page>();
-	Set<Page> sinkNodes = new HashSet<Page>();
-	Double lastPerplexity = null;
-	int unchangeCount = 0;
+	private Map<Integer, Page> pageMap = new HashMap<Integer, Page>();
+	private Set<Page> sinkNodes = new HashSet<Page>();
+	private Double lastPerplexity = null;
+	private int unchangeCount = 0;
 
-	List<Page> sortedPage = null;
+	private List<Page> sortedPage = null;
 
 
 	/**
@@ -45,7 +45,7 @@ public class PageRanker {
 				}
 				for (int i = 1; i < pageIDs.length; i++) {
 					Page page = pageMap.get(pageIDs[i]);
-					pageMap.get(pageIDs[0]).getOutLinks().add(page);
+					pageMap.get(pageIDs[0]).getInLinks().add(page);
 				}
 			}
 		}
@@ -64,14 +64,13 @@ public class PageRanker {
 	public void initialize(){
 		for (Page page: pageMap.values()) {
 			page.setPageRank(1.0/pageMap.size());
-			if (page.getOutLinks().isEmpty()) {
+			for (Page inPage : page.getInLinks()) {
+					pageMap.get(inPage.getPageID()).getOutLinks().add(page);
+			}
+		}
+		for (Page page: pageMap.values()) {
+			if (page.getOutLinks().isEmpty())
 				sinkNodes.add(page);
-			}
-			else {
-				for (Page outPage : page.getOutLinks()) {
-					pageMap.get(outPage.getPageID()).getInLinks().add(page);
-				}
-			}
 		}
 		System.out.println("Init Success");
 	}
@@ -102,7 +101,7 @@ public class PageRanker {
 			int diff = Math.abs(lP-nP);
 			if (diff < 1) {
 				unchangeCount++;
-				if (unchangeCount >= 4) {
+				if (unchangeCount >= 3) {
 					return true;
 				}
 			}

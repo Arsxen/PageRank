@@ -1,6 +1,6 @@
-//Name(s):
-//ID
-//Section
+//Name(s): Jarupong Pajakgo, Archawat Silachote, Dechapon Tongmak
+//ID: 2, 3, 2
+//Section: 6088107, 6088168, 6088211
 import java.io.*;
 import java.util.*;
 

@@ -3,7 +3,6 @@
 //Section
 import java.io.*;
 import java.util.*;
-import java.util.function.Function;
 
 /**
  * This class implements PageRank algorithm on simple graph structure.
@@ -12,11 +11,10 @@ import java.util.function.Function;
  */
 public class PageRanker {
 	private Map<Integer, Page> pageMap = new HashMap<Integer, Page>();
+	private Map<Integer, Double> newPR = new HashMap<Integer, Double>();
 	private Set<Page> sinkNodes = new HashSet<Page>();
-	private Double lastPerplexity = null;
-	private int unchangeCount = 0;
-
-	private List<Page> sortedPage = null;
+	private List<Double> perplexityTracker = new ArrayList<Double>();
+	private int unchangedCount = 0;
 
 
 	/**
@@ -34,8 +32,11 @@ public class PageRanker {
 		{
 			String line;
 			while ((line = br.readLine()) != null) {
+
 				String[] splitLine = line.split(" ");
 				int[] pageIDs = new int[splitLine.length];
+
+				//Put page to pageMap
 				for (int i = 0; i < splitLine.length; i++) {
 					int pid = Integer.parseInt(splitLine[i]);
 					pageIDs[i] = pid;
@@ -43,6 +44,8 @@ public class PageRanker {
 						pageMap.put(pid, new Page(pid));
 					}
 				}
+
+				//Put in-link (link form other node) to corresponding page
 				for (int i = 1; i < pageIDs.length; i++) {
 					Page page = pageMap.get(pageIDs[i]);
 					pageMap.get(pageIDs[0]).getInLinks().add(page);
@@ -53,7 +56,6 @@ public class PageRanker {
 		{
 			e.printStackTrace();
 		}
-		System.out.println("Load Sucessful!");
 	}
 	
 	/**
@@ -62,17 +64,19 @@ public class PageRanker {
 	 * setting an initial weight to each page.
 	 */
 	public void initialize(){
+		//Initialize PageRank value for every page and
+		//put out-links to corresponding page
 		for (Page page: pageMap.values()) {
 			page.setPageRank(1.0/pageMap.size());
 			for (Page inPage : page.getInLinks()) {
 					pageMap.get(inPage.getPageID()).getOutLinks().add(page);
 			}
 		}
+		//Initialize sink nodes
 		for (Page page: pageMap.values()) {
 			if (page.getOutLinks().isEmpty())
 				sinkNodes.add(page);
 		}
-		System.out.println("Init Success");
 	}
 	
 	/**
@@ -80,13 +84,13 @@ public class PageRanker {
 	 * of perplexity is given in the project specs.
 	 */
 	public double getPerplexity(){
-		double entropySum = 0;
+		//calulate entropy
+		double entropy = 0;
 		for (Page page: pageMap.values()) {
-			double entropy = page.getPageRank() * (Math.log(page.getPageRank()) / Math.log(2));
-			entropySum += entropy;
+			entropy += page.getPageRank() * (Math.log(page.getPageRank()) / Math.log(2));
 		}
-		double exponent = -entropySum;
-		return Math.pow(2, exponent);
+		entropy = -entropy;
+		return Math.pow(2, entropy);
 	}
 	
 	/**
@@ -95,22 +99,27 @@ public class PageRanker {
 	 */
 	public boolean isConverge(){
 		double perplexity = getPerplexity();
-		if (lastPerplexity != null) {
-			int lP = (int) Math.floor(lastPerplexity);
-			int nP = (int) Math.floor(perplexity);
+		perplexityTracker.add(perplexity);
+		//Skip first check
+		if (perplexityTracker.size() > 1) {
+			int currentRound = perplexityTracker.size() - 1;
+
+			//last perplexity
+			int lP = (int) Math.floor(perplexityTracker.get(currentRound-1));
+
+			//current perplexity
+			int nP = (int) Math.floor(perplexityTracker.get(currentRound));
+
 			int diff = Math.abs(lP-nP);
 			if (diff < 1) {
-				unchangeCount++;
-				if (unchangeCount >= 3) {
-					return true;
-				}
+				//No change in unit position (difference less than 1)
+				unchangedCount++;
+				return unchangedCount >= 3;
 			}
 			else {
-				unchangeCount = 0;
+				unchangedCount = 0;
 			}
 		}
-//		System.out.println("Not Coverges Last: " + (lastPerplexity == null? "Null":lastPerplexity) + " Current: " + perplexity);
-		lastPerplexity = perplexity;
 		return false;
 	}
 	
@@ -143,33 +152,44 @@ public class PageRanker {
 	 * 
 	 */
 	public void runPageRank(String perplexityOutFilename, String prOutFilename){
+		//StringBuilder for writing result to files
 		StringBuilder perplexityOut = new StringBuilder();
 		StringBuilder prOut = new StringBuilder();
 
+		///Teleportation factor
 		final double d = 0.85;
-		int i=0;
+
 		while (!isConverge()) {
 			double sinkPR = 0;
 			for (Page sinkPage: sinkNodes) {
 				sinkPR += sinkPage.getPageRank();
 			}
 			for (Page p: pageMap.values()) {
-				double newPR = (1-d)/pageMap.size();
-				newPR += d*sinkPR/pageMap.size();
+				double newpr = (1-d)/pageMap.size();
+				newpr += d*(sinkPR/pageMap.size());
 				for (Page q: p.getInLinks()) {
-					newPR += d*q.getPageRank()/q.getOutLinks().size();
+					newpr += d*(q.getPageRank()/q.getOutLinks().size());
 				}
-				p.setPageRank(newPR);
+				newPR.put(p.getPageID(), newpr);
 			}
-			perplexityOut.append(getPerplexity()).append(System.lineSeparator());
+			for (Page p: pageMap.values()) {
+				int pid = p.getPageID();
+				Double newpr = newPR.get(pid);
+				p.setPageRank(newpr);
+			}
 		}
-		sortedPage = new ArrayList<>(pageMap.values());
-		Collections.sort(sortedPage);
+
+		//Append String for file writing
+		for (int i = 1; i < perplexityTracker.size(); i++) {
+			perplexityOut.append(perplexityTracker.get(i)).append(System.lineSeparator());
+		}
+
 		for (Integer pid: pageMap.keySet()) {
 			Page p = pageMap.get(pid);
 			prOut.append(p.getPageID()).append(" ").append(p.getPageRank()).append(System.lineSeparator());
 		}
 
+		//Write String to file
 		File pout = new File(perplexityOutFilename);
 		File prout = new File(prOutFilename);
 		try(FileWriter fwp = new FileWriter(pout);
@@ -191,20 +211,25 @@ public class PageRanker {
 	 * Return the top K page IDs, whose scores are highest.
 	 */
 	public Integer[] getRankedPages(int K){
-        int len = Math.min(sortedPage.size(), K);
+		//Sort the score
+		List<Page> sortedPage = new ArrayList<>(pageMap.values());
+		Collections.sort(sortedPage, Collections.reverseOrder());
+
+		//Prevent index out of bound exception for large K or small data set
+		int len = Math.min(sortedPage.size(), K);
+
 		Integer[] results = new Integer[len];
 		for (int i = 0; i < len; i++) {
 			results[i] = sortedPage.get(i).getPageID();
 		}
 		return results;
-
 	}
 	
 	public static void main(String args[])
 	{
 	long startTime = System.currentTimeMillis();
 		PageRanker pageRanker =  new PageRanker();
-		pageRanker.loadData("test.dat");
+		pageRanker.loadData("citeseer.dat");
 		pageRanker.initialize();
 		pageRanker.runPageRank("perplexity.out", "pr_scores.out");
 		Integer[] rankedPages = pageRanker.getRankedPages(100);
@@ -265,6 +290,11 @@ class Page implements Comparable<Page> {
 
 	@Override
 	public int compareTo(Page o) {
-		return -Double.compare(pageRank, o.pageRank);
+		return Double.compare(pageRank, o.pageRank);
+	}
+
+	@Override
+	public String toString() {
+		return "Page ID: " + pageID + " PR: " + pageRank;
 	}
 }
